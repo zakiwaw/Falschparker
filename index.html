@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Ausfüller Neu</title>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-width: 700px;
+            margin: 30px auto;
+        }
+        h1, h2 {
+            color: #1d1d1f;
+            margin-bottom: 0.8em;
+        }
+        h1 {
+            font-size: 1.8em;
+            text-align: center;
+        }
+        h2 {
+            font-size: 1.3em;
+            border-bottom: 1px solid #e5e5e5;
+            padding-bottom: 0.5em;
+        }
+        label {
+            display: block;
+            margin-top: 18px;
+            margin-bottom: 6px;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        input[type="text"],
+        textarea {
+            width: calc(100% - 24px);
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1em;
+        }
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+        input:focus, textarea:focus {
+            border-color: #007aff;
+            box-shadow: 0 0 0 2px rgba(0,122,255,0.2);
+            outline: none;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.05em;
+            font-weight: 500;
+            margin-top: 25px;
+            transition: background-color 0.2s ease-in-out;
+            display: block;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #005ecb;
+        }
+        .file-input-container {
+            margin-bottom: 20px;
+        }
+        .file-input-label {
+            display: inline-block;
+            padding: 10px 18px;
+            background-color: #6c757d;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .file-input-label:hover {
+            background-color: #5a6268;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        #fileName {
+            margin-left: 12px;
+            font-style: italic;
+            color: #555;
+            font-size: 0.9em;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #e5e5e5;
+            margin: 25px 0;
+        }
+        .processing-message {
+            display: none;
+            color: #28a745;
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
+        }
+        /* Styles für Autocomplete */
+        .autocomplete-suggestions-wrapper {
+            position: relative; /* Wichtig für die Positionierung der Vorschlagsliste */
+        }
+        .autocomplete-suggestions {
+            border: 1px solid #ccc;
+            border-top: none;
+            max-height: 180px;
+            overflow-y: auto;
+            background-color: white;
+            position: absolute; /* Positioniert relativ zum Wrapper */
+            width: calc(100% - 2px); /* Breite an Textarea anpassen */
+            box-sizing: border-box;
+            z-index: 1000;
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .autocomplete-suggestions div {
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 0.95em;
+        }
+        .autocomplete-suggestions div:hover {
+            background-color: #f0f2f5;
+        }
+        .autocomplete-suggestions div.selected { /* Optional für Tastaturnavigation */
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+  
+
+    <div class="file-input-container">
+        <label for="pdfUpload" class="file-input-label">1. Original PDF hochladen</label>
+        <input type="file" id="pdfUpload" accept="application/pdf">
+        <span id="fileName">Keine Datei ausgewählt</span>
+    </div>
+    <hr>
+
+    <h2>2. Angaben ausfüllen</h2>
+
+    <div class="autocomplete-suggestions-wrapper">
+        <label for="tatvorwurf">Tatvorwurf / Sachverhaltsschilderung:</label>
+        <textarea id="tatvorwurf" placeholder="Beginnen Sie zu tippen für Vorschläge..."></textarea>
+        <div id="tatvorwurfSuggestions" class="autocomplete-suggestions" style="display: none;"></div>
+    </div>
+
+    <label for="tattag">Tattag (Datum):</label>
+    <input type="text" id="tattag" placeholder="TT.MM.JJJJ">
+
+    <label for="tatzeit">Tatzeit (Uhrzeit - von wann bis wann):</label>
+    <input type="text" id="tatzeit" placeholder="HH:MM - HH:MM oder ca. HH:MM">
+
+    <label for="kennzeichen">Kennzeichen des betroffenen Fahrzeuges:</label>
+    <input type="text" id="kennzeichen" placeholder="z.B. F-AB 123">
+
+    <label for="markeFarbe">Marke und Farbe des betroffenen Fahrzeuges:</label>
+    <input type="text" id="markeFarbe" placeholder="z.B. VW Golf, blau">
+
+    <!-- NEUES FELD HIER EINFÜGEN -->
+    <label for="ortDatum">Ort, Datum (für Unterschrift):</label>
+    <input type="text" id="ortDatum" placeholder="z.B. Frankfurt am Main, TT.MM.JJJJ">
+    
+    <hr>
+
+    <button id="generatePdfButton">3. PDF generieren und herunterladen</button>
+    <p id="processingMessage" class="processing-message">PDF wird verarbeitet...</p>
+</div>  
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Elementreferenzen ---
+        const pdfUploadInput = document.getElementById('pdfUpload');
+        const fileNameDisplay = document.getElementById('fileName');
+        const tatvorwurfInput = document.getElementById('tatvorwurf');
+        const suggestionsContainer = document.getElementById('tatvorwurfSuggestions');
+        const tattagInput = document.getElementById('tattag');
+        const tatzeitInput = document.getElementById('tatzeit');
+        const kennzeichenInput = document.getElementById('kennzeichen');
+        const markeFarbeInput = document.getElementById('markeFarbe');
+        const ortDatumInput = document.getElementById('ortDatum'); 
+        const generatePdfButton = document.getElementById('generatePdfButton');
+        const processingMessage = document.getElementById('processingMessage');
+
+        // --- PDF Upload Handler ---
+        pdfUploadInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                fileNameDisplay.textContent = e.target.files[0].name;
+            } else {
+                fileNameDisplay.textContent = 'Keine Datei ausgewählt';
+            }
+        });
+
+        // --- Tattag automatisch füllen ---
+        function setTodaysDate() {
+            const today = new Date();
+            const day = String(today.getDate()).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // Monate sind 0-basiert
+            const year = today.getFullYear();
+            tattagInput.value = `${day}.${month}.${year}`;
+        }
+        setTodaysDate(); // Beim Laden der Seite ausführen
+
+        // --- Autocomplete für Tatvorwurf ---
+        const tatvorwurfSachverhalte = [
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 3 Stunden.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 2 Stunden.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 30 Minuten.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 1 Stunde.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben - länger als 3 Stunden.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben - länger als 2 Stunden.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben - länger als 1 Stunde.",
+            "Sie überschritten bei Zeichen <314/315> mit Zusatzzeichen die zulässige Höchstparkdauer.",
+            "Sie überschritten bei Zeichen <314/315> mit Zusatzzeichen die zulässige Höchstparkdauer - länger als 30 Minuten.",
+            "Sie überschritten bei Zeichen <314/315> mit Zusatzzeichen die zulässige Höchstparkdauer - länger als 1 Stunde.",
+            "Sie überschritten bei Zeichen <314/315> mit Zusatzzeichen die zulässige Höchstparkdauer - länger als 2 Stunden.",
+            "Sie überschritten bei Zeichen <314/315> mit Zusatzzeichen die zulässige Höchstparkdauer - länger als 3 Stunden."
+        ];
+
+        tatvorwurfInput.addEventListener('input', function() {
+            const inputText = this.value.toLowerCase();
+            suggestionsContainer.innerHTML = '';
+            suggestionsContainer.style.display = 'none';
+
+            if (inputText.length < 2) return;
+
+            const filteredSuggestions = tatvorwurfSachverhalte.filter(sachverhalt =>
+                sachverhalt.toLowerCase().includes(inputText)
+            );
+
+            if (filteredSuggestions.length > 0) {
+                filteredSuggestions.forEach(suggestionText => {
+                    const div = document.createElement('div');
+                    div.textContent = suggestionText;
+                    div.addEventListener('click', function() {
+                        tatvorwurfInput.value = this.textContent;
+                        suggestionsContainer.innerHTML = '';
+                        suggestionsContainer.style.display = 'none';
+                    });
+                    suggestionsContainer.appendChild(div);
+                });
+                suggestionsContainer.style.display = 'block';
+            }
+        });
+
+        // Vorschläge ausblenden, wenn außerhalb geklickt wird
+        document.addEventListener('click', function(event) {
+            if (!tatvorwurfInput.contains(event.target) && !suggestionsContainer.contains(event.target)) {
+                suggestionsContainer.style.display = 'none';
+            }
+        });
+                // --- Ort, Datum automatisch füllen ---
+                function setOrtDatumAutomatically() {
+            const today = new Date();
+            const day = String(today.getDate()).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const year = today.getFullYear();
+            const currentDateFormatted = `${day}.${month}.${year}`;
+            ortDatumInput.value = `Frankfurt am Main, ${currentDateFormatted}`;
+        }
+        setOrtDatumAutomatically(); // Beim Laden der Seite auch ausführen
+        // --- PDF Generierung ---
+        generatePdfButton.addEventListener('click', async () => {
+            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+
+            const pdfFile = pdfUploadInput.files[0];
+            const tatvorwurf = tatvorwurfInput.value;
+            const tattag = tattagInput.value;
+            const tatzeit = tatzeitInput.value;
+            const kennzeichen = kennzeichenInput.value;
+            const markeFarbe = markeFarbeInput.value;
+            const ortDatum = ortDatumInput.value;
+
+            if (!pdfFile) {
+                alert("Bitte zuerst die Original-PDF-Datei hochladen!");
+                return;
+            }
+
+            processingMessage.style.display = 'block';
+            generatePdfButton.disabled = true;
+
+            try {
+                const existingPdfBytes = await pdfFile.arrayBuffer();
+                const pdfDoc = await PDFDocument.load(existingPdfBytes);
+                const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const pages = pdfDoc.getPages();
+                const firstPage = pages[0];
+                const { width, height } = firstPage.getSize();
+                const fontSize = 10;
+                const lineHeight = fontSize * 1.25; // Etwas mehr Zeilenabstand
+
+                // --- KOORDINATEN ANPASSEN (Beispielwerte, müssen justiert werden!) ---
+                // Y-Koordinaten sind von der UNTEREN Kante der Seite aus gemessen.
+                // height - X bedeutet X Punkte von der OBEREN Kante.
+                // X-Koordinaten sind vom linken Rand.
+
+                const xStart = 55; // Standard X-Position für linken Rand der Felder
+                const xSecondColumn = 300; // X-Position für Felder in der zweiten Spalte
+
+                // Tatvorwurf (mit Zeilenumbruch)
+                let currentY = height - 400; // Start Y-Position für Tatvorwurf (von oben)
+                const tatvorwurfMaxLineWidth = width - xStart - 60; // Breite des Tatvorwurffeldes (Rand rechts 30pt)
+
+                const tatvorwurfLines = tatvorwurf.split('\n'); // Manuelle Umbrüche
+                for (const manualLine of tatvorwurfLines) {
+                    let lineToDraw = '';
+                    const words = manualLine.split(' ');
+                    for (const word of words) {
+                        const testLine = lineToDraw + (lineToDraw ? ' ' : '') + word;
+                        const testWidth = helveticaFont.widthOfTextAtSize(testLine, fontSize);
+                        if (testWidth > tatvorwurfMaxLineWidth && lineToDraw) {
+                            firstPage.drawText(lineToDraw, { x: xStart, y: currentY, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
+                            currentY -= lineHeight;
+                            lineToDraw = word;
+                        } else {
+                            lineToDraw = testLine;
+                        }
+                    }
+                    if (lineToDraw) { // Letzten Teil der Zeile zeichnen
+                        firstPage.drawText(lineToDraw, { x: xStart, y: currentY, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
+                        currentY -= lineHeight;
+                    }
+                }
+                // WICHTIG: currentY ist jetzt die Y-Position UNTER dem Tatvorwurf.
+                // Die Y-Positionen der folgenden Felder müssen relativ dazu oder als feste Werte (wie bisher) gesetzt werden.
+                // Die folgenden Y-Werte sind noch die alten, statischen Werte und müssen evtl. angepasst werden,
+                // um nicht mit einem langen Tatvorwurf zu kollidieren oder zu viel Abstand zu haben.
+
+                firstPage.drawText(tattag, {
+                    x: xStart, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(tatzeit, {
+                    x: xSecondColumn, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(kennzeichen, {
+                    x: xStart, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(markeFarbe, {
+                    x: xSecondColumn, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(ortDatum, {
+                    x: xStart, y: height - 790, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+
+                const pdfBytes = await pdfDoc.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'ausgefuellte_anzeige.pdf';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+
+            } catch (err) {
+                console.error("Fehler beim Erstellen des PDFs:", err);
+                alert("Ein Fehler ist aufgetreten: " + err.message);
+            } finally {
+                processingMessage.style.display = 'none';
+                generatePdfButton.disabled = false;
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
