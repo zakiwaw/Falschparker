@@ -77,6 +77,10 @@
         button:hover {
             background-color: #005ecb;
         }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
         hr {
             border: none;
             border-top: 1px solid #e5e5e5;
@@ -89,9 +93,15 @@
             text-align: center;
             font-weight: 500;
         }
+        .info-message {
+            color: #555;
+            font-size: 0.9em;
+            text-align: center;
+            margin-bottom: 20px;
+        }
         /* Styles für Autocomplete */
         .autocomplete-suggestions-wrapper {
-            position: relative;
+            position: relative; /* Wichtig für die Positionierung der Vorschlagsliste */
         }
         .autocomplete-suggestions {
             border: 1px solid #ccc;
@@ -99,8 +109,8 @@
             max-height: 180px;
             overflow-y: auto;
             background-color: white;
-            position: absolute;
-            width: calc(100% - 2px);
+            position: absolute; /* Positioniert relativ zum Wrapper */
+            width: calc(100% - 2px); /* Breite an Textarea anpassen */
             box-sizing: border-box;
             z-index: 1000;
             border-radius: 0 0 6px 6px;
@@ -114,7 +124,7 @@
         .autocomplete-suggestions div:hover {
             background-color: #f0f2f5;
         }
-        .autocomplete-suggestions div.selected {
+        .autocomplete-suggestions div.selected { /* Optional für Tastaturnavigation */
             background-color: #e0e0e0;
         }
     </style>
@@ -122,11 +132,11 @@
 <body>
 
 <div class="container">
-    <h1>Falschparker-Anzeige ausfüllen</h1>
-    <p style="text-align: center; font-size: 0.9em; color: #555;">
-        Dieses Formular füllt die dritte Seite des <a href="https://frankfurt.de/-/media/frankfurtde/service-und-rathaus/verwaltung/aemter-und-institutionen/ordnungsamt/bussgeldstelle/pdf/anzeige-verkehrsordnungswidrigkeiten.pdf?dmc=1" target="_blank" rel="noopener noreferrer">offiziellen PDF-Dokuments der Stadt Frankfurt</a> aus.
-    </p>
+    <h1>Falschparker-Anzeige Assistent</h1>
+    <p class="info-message">Die PDF-Vorlage wird automatisch geladen. Bitte füllen Sie die Felder aus.</p>
     <hr>
+
+    <h2>1. Angaben zum Vorfall</h2>
 
     <div class="autocomplete-suggestions-wrapper">
         <label for="tatvorwurf">Tatvorwurf / Sachverhaltsschilderung:</label>
@@ -153,13 +163,19 @@
     
     <hr>
 
-    <button id="generatePdfButton">PDF generieren und herunterladen</button>
+    <button id="generatePdfButton" disabled>2. PDF herunterladen</button>
+    <p id="loadingTemplateMessage" class="info-message">Lade PDF-Vorlage...</p>
     <p id="processingMessage" class="processing-message">PDF wird verarbeitet...</p>
 </div>  
 
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => { // Make DOMContentLoaded async for await
+        // --- PDF URL ---
+        const pdfUrl = 'https://raw.githubusercontent.com/zakiwaw/Pdf-link/8b956a8f450a980face5af85c266d3ca432fa25d/Falschparker_Anzeige_formular.pdf';
+        let existingPdfBytes = null; // To store the loaded PDF bytes
+
         // --- Elementreferenzen ---
+        // pdfUploadInput und fileNameDisplay sind nicht mehr nötig
         const tatvorwurfInput = document.getElementById('tatvorwurf');
         const suggestionsContainer = document.getElementById('tatvorwurfSuggestions');
         const tatortInput = document.getElementById('tatort'); 
@@ -170,15 +186,53 @@
         const ortDatumInput = document.getElementById('ortDatum');
         const generatePdfButton = document.getElementById('generatePdfButton');
         const processingMessage = document.getElementById('processingMessage');
+        const loadingTemplateMessage = document.getElementById('loadingTemplateMessage');
 
-        const pdfUrl = 'https://frankfurt.de/-/media/frankfurtde/service-und-rathaus/verwaltung/aemter-und-institutionen/ordnungsamt/bussgeldstelle/pdf/anzeige-verkehrsordnungswidrigkeiten.pdf?dmc=1';
+        // --- Funktion zum Laden der PDF-Vorlage ---
+        async function loadPdfTemplate() {
+            try {
+                loadingTemplateMessage.style.display = 'block';
+                generatePdfButton.disabled = true;
+                const response = await fetch(pdfUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP-Fehler beim Laden der PDF: ${response.status}`);
+                }
+                existingPdfBytes = await response.arrayBuffer();
+                console.log("PDF-Vorlage erfolgreich geladen.");
+                generatePdfButton.disabled = false; // Enable button after successful load
+                loadingTemplateMessage.style.display = 'none';
+                generatePdfButton.textContent = "2. PDF herunterladen";
+            } catch (error) {
+                console.error("Fehler beim Laden der PDF-Vorlage:", error);
+                loadingTemplateMessage.textContent = `Fehler beim Laden der PDF-Vorlage: ${error.message}. Bitte Seite neu laden.`;
+                loadingTemplateMessage.style.color = 'red';
+                generatePdfButton.disabled = true;
+                generatePdfButton.textContent = "PDF-Vorlage nicht geladen";
+            }
+        }
+
+        // --- Lade die PDF-Vorlage beim Start ---
+        await loadPdfTemplate();
+
 
         // --- Kennzeichen automatisch großschreiben UND formatieren ---
         kennzeichenInput.addEventListener('input', function(e) {
             let value = this.value;
             const originalCursor = this.selectionStart;
+            
             let newValue = value.toUpperCase();
-            const formattedValue = newValue.replace(/([A-ZÄÖÜ])\s*([0-9])/g, '$1 $2');
+            const formattedValue = newValue.replace(/([A-ZÄÖÜ-])\s*([0-9])/g, '$1 $2')
+                                       .replace(/([A-ZÄÖÜ])\s*([A-ZÄÖÜ])/g, (match, p1, p2, offset, string) => {
+                                            // Nur ein Leerzeichen zwischen Buchstabenblöcken, wenn nicht am Anfang oder Ende eines Bindestrichs
+                                            // Und nur wenn es nicht schon Teil eines existierenden Blocks ist (z.B. "FFB")
+                                            // Diese Logik wird komplexer, wenn man alle Fälle abdecken will.
+                                            // Für Kennzeichen wie "F AB 123" vs "FB A 123"
+                                            // Einfachere Regel: Max 3 Buchstaben, dann Leerzeichen, dann Rest
+                                            // Oder spezifischer: XX-X YYYY oder X-XX YYYY
+                                            // Für den Moment belassen wir es bei der Zahlenformatierung
+                                            return match; // Beibehaltung der aktuellen Logik, die gut für Zahlen funktioniert
+                                        });
+
 
             if (this.value !== formattedValue) {
                 this.value = formattedValue;
@@ -189,9 +243,10 @@
             }
         });
 
+        // --- Tatzeit automatisch vorschlagen ---
         function setSuggestedTatzeit() {
             const now = new Date();
-            const fromTime = new Date(now.getTime() - 5 * 60 * 1000);
+            const fromTime = new Date(now.getTime() - 5 * 60 * 1000); 
             const fromHours = String(fromTime.getHours()).padStart(2, '0');
             const fromMinutes = String(fromTime.getMinutes()).padStart(2, '0');
             const toHours = String(now.getHours()).padStart(2, '0');
@@ -200,17 +255,36 @@
         }
         setSuggestedTatzeit();
 
+        // --- Tattag (heute) automatisch füllen ---
         function setTodaysDate() {
             const today = new Date();
             const day = String(today.getDate()).padStart(2, '0');
-            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0'); 
             const year = today.getFullYear();
             tattagInput.value = `${day}.${month}.${year}`;
         }
         setTodaysDate();
 
+        // --- Ort, Datum (heute) automatisch füllen ---
+        function setOrtDatumAutomatically() {
+            const today = new Date();
+            const day = String(today.getDate()).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const year = today.getFullYear();
+            const currentDateFormatted = `${day}.${month}.${year}`;
+            ortDatumInput.value = `Frankfurt am Main, ${currentDateFormatted}`;
+        }
+        setOrtDatumAutomatically();
+        
+        // --- Tatort automatisch vorschlagen/füllen ---
+        function setSuggestedTatort() {
+            tatortInput.value = "Siegener Str. 54"; // Beispiel
+        }
+        setSuggestedTatort();
+
+        // --- Autocomplete für Tatvorwurf ---
         const tatvorwurfSachverhalte = [
-             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben.",
+            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben.",
             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 3 Stunden.",
             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 2 Stunden.",
             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 30 Minuten.",
@@ -229,6 +303,7 @@
             const inputText = this.value.toLowerCase();
             suggestionsContainer.innerHTML = '';
             suggestionsContainer.style.display = 'none';
+
             if (inputText.length < 2) return;
 
             const filteredSuggestions = tatvorwurfSachverhalte.filter(sachverhalt =>
@@ -256,22 +331,13 @@
             }
         });
 
-        function setOrtDatumAutomatically() {
-            const today = new Date();
-            const day = String(today.getDate()).padStart(2, '0');
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const year = today.getFullYear();
-            const currentDateFormatted = `${day}.${month}.${year}`;
-            ortDatumInput.value = `Frankfurt am Main, ${currentDateFormatted}`;
-        }
-        setOrtDatumAutomatically();
-
-        function setSuggestedTatort() {
-            tatortInput.value = "Siegener Str. 54"; // Beispielwert, kann angepasst werden
-        }
-        setSuggestedTatort();
-
+        // --- PDF Generierung ---
         generatePdfButton.addEventListener('click', async () => {
+            if (!existingPdfBytes) { // Prüfen, ob die Vorlage geladen wurde
+                alert("Die PDF-Vorlage konnte nicht geladen werden. Bitte versuchen Sie, die Seite neu zu laden.");
+                return;
+            }
+
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
             const tatvorwurf = tatvorwurfInput.value;
@@ -286,47 +352,22 @@
             generatePdfButton.disabled = true;
 
             try {
-                // Lade das PDF von der URL
-                const existingPdfBytes = await fetch(pdfUrl).then(res => res.arrayBuffer());
-                const sourcePdfDoc = await PDFDocument.load(existingPdfBytes);
-
-                // Erstelle ein neues PDF-Dokument
-                const newPdfDoc = await PDFDocument.create();
-
-                // Kopiere die DRITTE Seite (Index 2) vom Quell-PDF in das neue Dokument
-                // Die Methode copyPages gibt ein Array zurück, daher die Destrukturierung [formPage]
-                const [formPage] = await newPdfDoc.copyPages(sourcePdfDoc, [2]); 
-                newPdfDoc.addPage(formPage); // Füge die kopierte Seite dem neuen Dokument hinzu
-
-                // Jetzt ist 'formPage' die einzige Seite im 'newPdfDoc'
-                // und es ist die Seite, auf die wir zeichnen wollen.
-                const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
-                const { width, height } = formPage.getSize(); // Größe der Zielseite (Seite 3)
+                // PDFDocument.load erwartet ein ArrayBuffer oder Uint8Array.
+                // Da existingPdfBytes bereits ein ArrayBuffer ist, ist das korrekt.
+                const pdfDoc = await PDFDocument.load(existingPdfBytes);
+                const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const pages = pdfDoc.getPages();
+                const firstPage = pages[0];
+                const { width, height } = firstPage.getSize();
                 const fontSize = 10;
                 const lineHeight = fontSize * 1.25;
 
-                // --- WICHTIG: KOORDINATEN ANPASSEN! ---
-                // Die folgenden Koordinaten sind nur Platzhalter und müssen für das
-                // Layout der DRITTEN SEITE des Frankfurt-PDFs genau justiert werden.
-                // Y-Koordinaten sind von der UNTEREN Kante der Seite aus gemessen.
-                // height - X bedeutet X Punkte von der OBEREN Kante.
-                // X-Koordinaten sind vom linken Rand.
+                const xStart = 55; 
+                const xSecondColumn = 300; 
 
-                // Beispiel:
-                // Ein Feld, das ca. 100 Punkte von oben und 50 Punkte von links auf der Seite 3 ist:
-                // formPage.drawText(text, { x: 50, y: height - 100, ... });
-                
-                // Beispiellayout, angepasst für das Formular (grobe Schätzungen, bitte validieren!)
-                // Diese Werte müssen Sie durch Ausprobieren für die Seite 3 des PDFs ermitteln!
-                const xStart = 55;        // X-Position für die linke Spalte
-                const xSecondColumn = 300; // X-Position für die rechte Spalte
-
-                // Tatvorwurf / Sachverhaltsschilderung (Seite 3, Feld oben)
-                // Auf dem Formular gibt es ein großes Feld dafür.
-                // Wir müssen die Y-Koordinate für den Beginn dieses Feldes finden.
-                // Angenommen, das Feld beginnt ca. 160pt von oben.
-                let currentY_Tatvorwurf = height - 160; 
-                const tatvorwurfMaxLineWidth = width - xStart - 60; // Breite für Textumbruch
+                // Tatvorwurf (mit Zeilenumbruch)
+                let currentY = height - 400; 
+                const tatvorwurfMaxLineWidth = width - xStart - 60; 
 
                 const tatvorwurfLines = tatvorwurf.split('\n');
                 for (const manualLine of tatvorwurfLines) {
@@ -336,42 +377,43 @@
                         const testLine = lineToDraw + (lineToDraw ? ' ' : '') + word;
                         const testWidth = helveticaFont.widthOfTextAtSize(testLine, fontSize);
                         if (testWidth > tatvorwurfMaxLineWidth && lineToDraw) {
-                            formPage.drawText(lineToDraw, { x: xStart, y: currentY_Tatvorwurf, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
-                            currentY_Tatvorwurf -= lineHeight;
+                            firstPage.drawText(lineToDraw, { x: xStart, y: currentY, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
+                            currentY -= lineHeight;
                             lineToDraw = word;
                         } else {
                             lineToDraw = testLine;
                         }
                     }
                     if (lineToDraw) {
-                        formPage.drawText(lineToDraw, { x: xStart, y: currentY_Tatvorwurf, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
-                        currentY_Tatvorwurf -= lineHeight;
+                        firstPage.drawText(lineToDraw, { x: xStart, y: currentY, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
+                        currentY -= lineHeight;
                     }
                 }
                 
-                // Felder weiter unten auf Seite 3 (grobe Schätzungen für Y)
-                // Tatort (Zeile "Tatort"):
-                formPage.drawText(tatort,     { x: xStart,        y: height - 285, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
-                // Tattag (Zeile "Datum / Tatzeit"):
-                formPage.drawText(tattag,     { x: xStart,        y: height - 315, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
-                // Tatzeit (Zeile "Datum / Tatzeit", rechts):
-                formPage.drawText(tatzeit,    { x: xStart + 180,  y: height - 315, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // X und Y anpassen
-                // Kennzeichen (Zeile "Amts-/Behördenkennzeichen"):
-                formPage.drawText(kennzeichen,{ x: xStart,        y: height - 345, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
-                // MarkeFarbe (Zeile "Marke/Farbe"):
-                formPage.drawText(markeFarbe, { x: xStart,        y: height - 375, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
+                firstPage.drawText(tatort, {
+                    x: xStart, y: height - 510, size: fontSize, font: helveticaFont, color: rgb(0, 0, 0)
+                });
+                firstPage.drawText(tattag, {
+                    x: xStart, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(tatzeit, {
+                    x: xSecondColumn, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(kennzeichen, {
+                    x: xStart, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(markeFarbe, {
+                    x: xSecondColumn, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                firstPage.drawText(ortDatum, { // Für die Unterschriftszeile
+                    x: xStart, y: height - 790, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
 
-                // Ort, Datum für "Unterschrift" (ganz unten auf Seite 3)
-                // Dies ist meistens in der Nähe des Unterschriftsfeldes.
-                // Angenommen, es ist ca. 130pt vom unteren Rand (was height - (height - 130) = 130 ist)
-                // Oder ca. 720pt von oben für eine A4-Seite (ca. 842pt hoch)
-                formPage.drawText(ortDatum,   { x: xStart,        y: height - 730, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
-
-                const pdfBytes = await newPdfDoc.save();
+                const pdfBytes = await pdfDoc.save();
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = 'ausgefuellte_anzeige_falschparker_frankfurt.pdf'; // Aussagekräftigerer Name
+                link.download = 'ausgefuellte_anzeige.pdf';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -379,10 +421,10 @@
 
             } catch (err) {
                 console.error("Fehler beim Erstellen des PDFs:", err);
-                alert("Ein Fehler ist aufgetreten: " + err.message + "\n\nStellen Sie sicher, dass Sie mit dem Internet verbunden sind, um das PDF-Template zu laden.");
+                alert("Ein Fehler ist aufgetreten: " + err.message);
             } finally {
                 processingMessage.style.display = 'none';
-                generatePdfButton.disabled = false;
+                generatePdfButton.disabled = false; // Re-enable button
             }
         });
     });
@@ -390,3 +432,4 @@
 
 </body>
 </html>
+
