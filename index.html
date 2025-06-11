@@ -77,31 +77,6 @@
         button:hover {
             background-color: #005ecb;
         }
-        .file-input-container {
-            margin-bottom: 20px;
-        }
-        .file-input-label {
-            display: inline-block;
-            padding: 10px 18px;
-            background-color: #6c757d;
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.95em;
-            transition: background-color 0.2s ease-in-out;
-        }
-        .file-input-label:hover {
-            background-color: #5a6268;
-        }
-        input[type="file"] {
-            display: none;
-        }
-        #fileName {
-            margin-left: 12px;
-            font-style: italic;
-            color: #555;
-            font-size: 0.9em;
-        }
         hr {
             border: none;
             border-top: 1px solid #e5e5e5;
@@ -116,7 +91,7 @@
         }
         /* Styles für Autocomplete */
         .autocomplete-suggestions-wrapper {
-            position: relative; /* Wichtig für die Positionierung der Vorschlagsliste */
+            position: relative;
         }
         .autocomplete-suggestions {
             border: 1px solid #ccc;
@@ -124,8 +99,8 @@
             max-height: 180px;
             overflow-y: auto;
             background-color: white;
-            position: absolute; /* Positioniert relativ zum Wrapper */
-            width: calc(100% - 2px); /* Breite an Textarea anpassen */
+            position: absolute;
+            width: calc(100% - 2px);
             box-sizing: border-box;
             z-index: 1000;
             border-radius: 0 0 6px 6px;
@@ -139,7 +114,7 @@
         .autocomplete-suggestions div:hover {
             background-color: #f0f2f5;
         }
-        .autocomplete-suggestions div.selected { /* Optional für Tastaturnavigation */
+        .autocomplete-suggestions div.selected {
             background-color: #e0e0e0;
         }
     </style>
@@ -147,16 +122,11 @@
 <body>
 
 <div class="container">
-  
-
-    <div class="file-input-container">
-        <label for="pdfUpload" class="file-input-label">1. PDF hochladen</label>
-        <input type="file" id="pdfUpload" accept="application/pdf">
-        <span id="fileName">Keine Datei ausgewählt</span>
-    </div>
+    <h1>Falschparker-Anzeige ausfüllen</h1>
+    <p style="text-align: center; font-size: 0.9em; color: #555;">
+        Dieses Formular füllt die dritte Seite des <a href="https://frankfurt.de/-/media/frankfurtde/service-und-rathaus/verwaltung/aemter-und-institutionen/ordnungsamt/bussgeldstelle/pdf/anzeige-verkehrsordnungswidrigkeiten.pdf?dmc=1" target="_blank" rel="noopener noreferrer">offiziellen PDF-Dokuments der Stadt Frankfurt</a> aus.
+    </p>
     <hr>
-
-    
 
     <div class="autocomplete-suggestions-wrapper">
         <label for="tatvorwurf">Tatvorwurf / Sachverhaltsschilderung:</label>
@@ -165,7 +135,6 @@
     </div>
     <label for="tatort">Tatort:</label>
     <input type="text" id="tatort" placeholder="z.B. Siegener Str. 54, vor Hausnummer 5">
-                      <!-- ^^^ ID HIER HINZUGEFÜGT -->
 
     <label for="tattag">Tattag (Datum):</label>
     <input type="text" id="tattag" placeholder="TT.MM.JJJJ">
@@ -179,117 +148,69 @@
     <label for="markeFarbe">Marke und Farbe des Fahrzeuges:</label>
     <input type="text" id="markeFarbe" placeholder="z.B. VW Golf, blau">
 
-    <!-- NEUES FELD HIER EINFÜGEN -->
     <label for="ortDatum">Ort, Datum (für Unterschrift):</label>
     <input type="text" id="ortDatum" placeholder="z.B. Frankfurt am Main, TT.MM.JJJJ">
     
     <hr>
 
-    <button id="generatePdfButton">3. PDF herunterladen</button>
+    <button id="generatePdfButton">PDF generieren und herunterladen</button>
     <p id="processingMessage" class="processing-message">PDF wird verarbeitet...</p>
 </div>  
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         // --- Elementreferenzen ---
-        const pdfUploadInput = document.getElementById('pdfUpload');
-        const fileNameDisplay = document.getElementById('fileName');
         const tatvorwurfInput = document.getElementById('tatvorwurf');
         const suggestionsContainer = document.getElementById('tatvorwurfSuggestions');
         const tatortInput = document.getElementById('tatort'); 
         const tattagInput = document.getElementById('tattag');
         const tatzeitInput = document.getElementById('tatzeit');
-        const kennzeichenInput = document.getElementById('kennzeichen'); // Bereits vorhanden
+        const kennzeichenInput = document.getElementById('kennzeichen');
         const markeFarbeInput = document.getElementById('markeFarbe');
         const ortDatumInput = document.getElementById('ortDatum');
         const generatePdfButton = document.getElementById('generatePdfButton');
         const processingMessage = document.getElementById('processingMessage');
 
+        const pdfUrl = 'https://frankfurt.de/-/media/frankfurtde/service-und-rathaus/verwaltung/aemter-und-institutionen/ordnungsamt/bussgeldstelle/pdf/anzeige-verkehrsordnungswidrigkeiten.pdf?dmc=1';
+
         // --- Kennzeichen automatisch großschreiben UND formatieren ---
         kennzeichenInput.addEventListener('input', function(e) {
             let value = this.value;
             const originalCursor = this.selectionStart;
-            let cursorOffset = 0;
-
-            // 1. In Großbuchstaben umwandeln
             let newValue = value.toUpperCase();
-
-            // 2. Formatierung anwenden:
-            //    Sucht nach einem Buchstaben ([A-ZÄÖÜ]), optional gefolgt von beliebig vielen Leerzeichen (\s*),
-            //    dann einer Ziffer ([0-9]).
-            //    Ersetzt dies durch: Buchstabe, EIN Leerzeichen, Ziffer.
-            //    Der 'g'-Flag sorgt dafür, dass alle Vorkommen im String ersetzt werden (obwohl bei Kennzeichen meist nur eines relevant ist).
-            //    Dies behandelt:
-            //    - "ABC123" -> "ABC 123"
-            //    - "ABC 123" -> "ABC 123" (bleibt korrekt)
-            //    - "ABC  123" -> "ABC 123" (korrigiert zu viele Leerzeichen)
-            //    - "A-BC123" -> "A-BC 123"
             const formattedValue = newValue.replace(/([A-ZÄÖÜ])\s*([0-9])/g, '$1 $2');
 
             if (this.value !== formattedValue) {
                 this.value = formattedValue;
-
-                // Einfache Cursor-Anpassung:
-                // Wenn sich die Länge geändert hat (z.B. ein Leerzeichen wurde hinzugefügt/entfernt),
-                // wird versucht, die Cursorposition relativ anzupassen.
-                // Dies ist nicht immer perfekt, besonders bei komplexen Bearbeitungen mitten im String,
-                // aber für typische Eingaben oft ausreichend.
                 const diff = formattedValue.length - value.length;
                 let newCursorPos = originalCursor + diff;
-                
-                // Korrektur, falls der Cursor direkt an der Stelle der Änderung stand
-                // Beispiel: ABC|123 -> tippe '1' -> ABC1|23 (originalCursor=3)
-                // Formatierung: ABC 1|23 (newValue.length - value.length = 1) -> newCursorPos = 3 + 1 = 4. Passt.
-                // Beispiel: ABC |123 -> tippe Backspace -> AB|123 (originalCursor=2)
-                // Formatierung: AB 1|23 (newValue.length - value.length = 1) -> newCursorPos = 2 + 1 = 3. Passt.
-
-                // Sicherstellen, dass die Cursorposition gültig ist
                 newCursorPos = Math.max(0, Math.min(newCursorPos, formattedValue.length));
                 this.setSelectionRange(newCursorPos, newCursorPos);
             }
         });
-        // --- ENDE: Kennzeichen automatisch großschreiben UND formatieren ---
 
-        // --- PDF Upload Handler ---
-        pdfUploadInput.addEventListener('change', function(e) {
-            if (e.target.files.length > 0) {
-                fileNameDisplay.textContent = e.target.files[0].name;
-            } else {
-                fileNameDisplay.textContent = 'Keine Datei ausgewählt';
-            }
-        });
         function setSuggestedTatzeit() {
             const now = new Date();
-
-            // "Von"-Zeit: Aktuelle Zeit - 5 Minuten
-            const fromTime = new Date(now.getTime() - 5 * 60 * 1000); // 5 Minuten in Millisekunden
+            const fromTime = new Date(now.getTime() - 5 * 60 * 1000);
             const fromHours = String(fromTime.getHours()).padStart(2, '0');
             const fromMinutes = String(fromTime.getMinutes()).padStart(2, '0');
-
-            // "Bis"-Zeit: Aktuelle Zeit
             const toHours = String(now.getHours()).padStart(2, '0');
             const toMinutes = String(now.getMinutes()).padStart(2, '0');
-
             tatzeitInput.value = `${fromHours}:${fromMinutes} - ${toHours}:${toMinutes}`;
         }
-        // --- ENDE: Tatzeit automatisch vorschlagen ---
-
-        // Beim Laden der Seite ausführen:
-
-        setSuggestedTatzeit(); // NEU HINZUGEFÜGT
+        setSuggestedTatzeit();
 
         function setTodaysDate() {
             const today = new Date();
             const day = String(today.getDate()).padStart(2, '0');
-            const month = String(today.getMonth() + 1).padStart(2, '0'); // Monate sind 0-basiert
+            const month = String(today.getMonth() + 1).padStart(2, '0');
             const year = today.getFullYear();
             tattagInput.value = `${day}.${month}.${year}`;
         }
-        setTodaysDate(); // Beim Laden der Seite ausführen
+        setTodaysDate();
 
-        // --- Autocomplete für Tatvorwurf ---
         const tatvorwurfSachverhalte = [
-            "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben.",
+             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) richtig eingestellt zu haben.",
             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 3 Stunden.",
             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 2 Stunden.",
             "Sie parkten bei Zeichen <314/315>, ohne die durch Zusatzzeichen vorgeschriebene Parkscheibe (Bild 318) von außen gut lesbar im oder am Fahrzeug angebracht zu haben - länger als 30 Minuten.",
@@ -308,7 +229,6 @@
             const inputText = this.value.toLowerCase();
             suggestionsContainer.innerHTML = '';
             suggestionsContainer.style.display = 'none';
-
             if (inputText.length < 2) return;
 
             const filteredSuggestions = tatvorwurfSachverhalte.filter(sachverhalt =>
@@ -330,14 +250,13 @@
             }
         });
 
-        // Vorschläge ausblenden, wenn außerhalb geklickt wird
         document.addEventListener('click', function(event) {
             if (!tatvorwurfInput.contains(event.target) && !suggestionsContainer.contains(event.target)) {
                 suggestionsContainer.style.display = 'none';
             }
         });
-                // --- Ort, Datum automatisch füllen ---
-                function setOrtDatumAutomatically() {
+
+        function setOrtDatumAutomatically() {
             const today = new Date();
             const day = String(today.getDate()).padStart(2, '0');
             const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -345,18 +264,16 @@
             const currentDateFormatted = `${day}.${month}.${year}`;
             ortDatumInput.value = `Frankfurt am Main, ${currentDateFormatted}`;
         }
-        setOrtDatumAutomatically(); // Beim Laden der Seite auch ausführen
-        // --- PDF Generierung ---
-        // --- Tatort automatisch vorschlagen/füllen ---
-function setSuggestedTatort() {
-    tatortInput.value = "Siegener Str. 54";
-}
-// --- ENDE: Tatort automatisch vorschlagen/füllen ---
-setSuggestedTatort();
+        setOrtDatumAutomatically();
+
+        function setSuggestedTatort() {
+            tatortInput.value = "Siegener Str. 54"; // Beispielwert, kann angepasst werden
+        }
+        setSuggestedTatort();
+
         generatePdfButton.addEventListener('click', async () => {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
-            const pdfFile = pdfUploadInput.files[0];
             const tatvorwurf = tatvorwurfInput.value;
             const tattag = tattagInput.value;
             const tatzeit = tatzeitInput.value;
@@ -365,37 +282,53 @@ setSuggestedTatort();
             const ortDatum = ortDatumInput.value;
             const tatort = tatortInput.value;
 
-            if (!pdfFile) {
-                alert("Bitte zuerst die Original-PDF-Datei hochladen!");
-                return;
-            }
-
             processingMessage.style.display = 'block';
             generatePdfButton.disabled = true;
 
             try {
-                const existingPdfBytes = await pdfFile.arrayBuffer();
-                const pdfDoc = await PDFDocument.load(existingPdfBytes);
-                const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                const pages = pdfDoc.getPages();
-                const firstPage = pages[0];
-                const { width, height } = firstPage.getSize();
-                const fontSize = 10;
-                const lineHeight = fontSize * 1.25; // Etwas mehr Zeilenabstand
+                // Lade das PDF von der URL
+                const existingPdfBytes = await fetch(pdfUrl).then(res => res.arrayBuffer());
+                const sourcePdfDoc = await PDFDocument.load(existingPdfBytes);
 
-                // --- KOORDINATEN ANPASSEN (Beispielwerte, müssen justiert werden!) ---
+                // Erstelle ein neues PDF-Dokument
+                const newPdfDoc = await PDFDocument.create();
+
+                // Kopiere die DRITTE Seite (Index 2) vom Quell-PDF in das neue Dokument
+                // Die Methode copyPages gibt ein Array zurück, daher die Destrukturierung [formPage]
+                const [formPage] = await newPdfDoc.copyPages(sourcePdfDoc, [2]); 
+                newPdfDoc.addPage(formPage); // Füge die kopierte Seite dem neuen Dokument hinzu
+
+                // Jetzt ist 'formPage' die einzige Seite im 'newPdfDoc'
+                // und es ist die Seite, auf die wir zeichnen wollen.
+                const helveticaFont = await newPdfDoc.embedFont(StandardFonts.Helvetica);
+                const { width, height } = formPage.getSize(); // Größe der Zielseite (Seite 3)
+                const fontSize = 10;
+                const lineHeight = fontSize * 1.25;
+
+                // --- WICHTIG: KOORDINATEN ANPASSEN! ---
+                // Die folgenden Koordinaten sind nur Platzhalter und müssen für das
+                // Layout der DRITTEN SEITE des Frankfurt-PDFs genau justiert werden.
                 // Y-Koordinaten sind von der UNTEREN Kante der Seite aus gemessen.
                 // height - X bedeutet X Punkte von der OBEREN Kante.
                 // X-Koordinaten sind vom linken Rand.
 
-                const xStart = 55; // Standard X-Position für linken Rand der Felder
-                const xSecondColumn = 300; // X-Position für Felder in der zweiten Spalte
+                // Beispiel:
+                // Ein Feld, das ca. 100 Punkte von oben und 50 Punkte von links auf der Seite 3 ist:
+                // formPage.drawText(text, { x: 50, y: height - 100, ... });
+                
+                // Beispiellayout, angepasst für das Formular (grobe Schätzungen, bitte validieren!)
+                // Diese Werte müssen Sie durch Ausprobieren für die Seite 3 des PDFs ermitteln!
+                const xStart = 55;        // X-Position für die linke Spalte
+                const xSecondColumn = 300; // X-Position für die rechte Spalte
 
-                // Tatvorwurf (mit Zeilenumbruch)
-                let currentY = height - 400; // Start Y-Position für Tatvorwurf (von oben)
-                const tatvorwurfMaxLineWidth = width - xStart - 60; // Breite des Tatvorwurffeldes (Rand rechts 30pt)
+                // Tatvorwurf / Sachverhaltsschilderung (Seite 3, Feld oben)
+                // Auf dem Formular gibt es ein großes Feld dafür.
+                // Wir müssen die Y-Koordinate für den Beginn dieses Feldes finden.
+                // Angenommen, das Feld beginnt ca. 160pt von oben.
+                let currentY_Tatvorwurf = height - 160; 
+                const tatvorwurfMaxLineWidth = width - xStart - 60; // Breite für Textumbruch
 
-                const tatvorwurfLines = tatvorwurf.split('\n'); // Manuelle Umbrüche
+                const tatvorwurfLines = tatvorwurf.split('\n');
                 for (const manualLine of tatvorwurfLines) {
                     let lineToDraw = '';
                     const words = manualLine.split(' ');
@@ -403,53 +336,42 @@ setSuggestedTatort();
                         const testLine = lineToDraw + (lineToDraw ? ' ' : '') + word;
                         const testWidth = helveticaFont.widthOfTextAtSize(testLine, fontSize);
                         if (testWidth > tatvorwurfMaxLineWidth && lineToDraw) {
-                            firstPage.drawText(lineToDraw, { x: xStart, y: currentY, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
-                            currentY -= lineHeight;
+                            formPage.drawText(lineToDraw, { x: xStart, y: currentY_Tatvorwurf, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
+                            currentY_Tatvorwurf -= lineHeight;
                             lineToDraw = word;
                         } else {
                             lineToDraw = testLine;
                         }
                     }
-                    if (lineToDraw) { // Letzten Teil der Zeile zeichnen
-                        firstPage.drawText(lineToDraw, { x: xStart, y: currentY, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
-                        currentY -= lineHeight;
+                    if (lineToDraw) {
+                        formPage.drawText(lineToDraw, { x: xStart, y: currentY_Tatvorwurf, size: fontSize, font: helveticaFont, color: rgb(0,0,0) });
+                        currentY_Tatvorwurf -= lineHeight;
                     }
                 }
-                // WICHTIG: currentY ist jetzt die Y-Position UNTER dem Tatvorwurf.
-                // Die Y-Positionen der folgenden Felder müssen relativ dazu oder als feste Werte (wie bisher) gesetzt werden.
-                // Die folgenden Y-Werte sind noch die alten, statischen Werte und müssen evtl. angepasst werden,
-                // um nicht mit einem langen Tatvorwurf zu kollidieren oder zu viel Abstand zu haben.
-                firstPage.drawText(tatort, {
-    x: xStart,
-    y: height - 510,
-    size: fontSize,
-    font: helveticaFont,
-    color: rgb(0, 0, 0)
-});
-                firstPage.drawText(tattag, {
-                    x: xStart, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
-                });
-                firstPage.drawText(tatzeit, {
-                    x: xSecondColumn, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
-                });
-                firstPage.drawText(kennzeichen, {
-                    x: xStart, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
-                });
-                firstPage.drawText(markeFarbe, {
-                    x: xSecondColumn, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
-                });
-                firstPage.drawText(ortDatum, {
-                    x: xStart, y: height - 790, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
-                });
-                                firstPage.drawText(ortDatum, {
-                    x: xStart, y: height - 790, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
-                });
+                
+                // Felder weiter unten auf Seite 3 (grobe Schätzungen für Y)
+                // Tatort (Zeile "Tatort"):
+                formPage.drawText(tatort,     { x: xStart,        y: height - 285, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
+                // Tattag (Zeile "Datum / Tatzeit"):
+                formPage.drawText(tattag,     { x: xStart,        y: height - 315, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
+                // Tatzeit (Zeile "Datum / Tatzeit", rechts):
+                formPage.drawText(tatzeit,    { x: xStart + 180,  y: height - 315, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // X und Y anpassen
+                // Kennzeichen (Zeile "Amts-/Behördenkennzeichen"):
+                formPage.drawText(kennzeichen,{ x: xStart,        y: height - 345, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
+                // MarkeFarbe (Zeile "Marke/Farbe"):
+                formPage.drawText(markeFarbe, { x: xStart,        y: height - 375, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
 
-                const pdfBytes = await pdfDoc.save();
+                // Ort, Datum für "Unterschrift" (ganz unten auf Seite 3)
+                // Dies ist meistens in der Nähe des Unterschriftsfeldes.
+                // Angenommen, es ist ca. 130pt vom unteren Rand (was height - (height - 130) = 130 ist)
+                // Oder ca. 720pt von oben für eine A4-Seite (ca. 842pt hoch)
+                formPage.drawText(ortDatum,   { x: xStart,        y: height - 730, size: fontSize, font: helveticaFont, color: rgb(0,0,0) }); // Y-Wert muss angepasst werden
+
+                const pdfBytes = await newPdfDoc.save();
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = 'ausgefuellte_anzeige.pdf';
+                link.download = 'ausgefuellte_anzeige_falschparker_frankfurt.pdf'; // Aussagekräftigerer Name
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -457,7 +379,7 @@ setSuggestedTatort();
 
             } catch (err) {
                 console.error("Fehler beim Erstellen des PDFs:", err);
-                alert("Ein Fehler ist aufgetreten: " + err.message);
+                alert("Ein Fehler ist aufgetreten: " + err.message + "\n\nStellen Sie sicher, dass Sie mit dem Internet verbunden sind, um das PDF-Template zu laden.");
             } finally {
                 processingMessage.style.display = 'none';
                 generatePdfButton.disabled = false;
