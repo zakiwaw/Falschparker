@@ -150,19 +150,22 @@
   
 
     <div class="file-input-container">
-        <label for="pdfUpload" class="file-input-label">1. Original PDF hochladen</label>
+        <label for="pdfUpload" class="file-input-label">1. PDF hochladen</label>
         <input type="file" id="pdfUpload" accept="application/pdf">
         <span id="fileName">Keine Datei ausgewählt</span>
     </div>
     <hr>
 
-    <h2>2. Angaben ausfüllen</h2>
+    
 
     <div class="autocomplete-suggestions-wrapper">
         <label for="tatvorwurf">Tatvorwurf / Sachverhaltsschilderung:</label>
         <textarea id="tatvorwurf" placeholder="Beginnen Sie zu tippen für Vorschläge..."></textarea>
         <div id="tatvorwurfSuggestions" class="autocomplete-suggestions" style="display: none;"></div>
     </div>
+    <label for="tatort">Tatort:</label>
+    <input type="text" id="tatort" placeholder="z.B. Siegener Str. 54, vor Hausnummer 5">
+                      <!-- ^^^ ID HIER HINZUGEFÜGT -->
 
     <label for="tattag">Tattag (Datum):</label>
     <input type="text" id="tattag" placeholder="TT.MM.JJJJ">
@@ -170,10 +173,10 @@
     <label for="tatzeit">Tatzeit (Uhrzeit - von wann bis wann):</label>
     <input type="text" id="tatzeit" placeholder="HH:MM - HH:MM oder ca. HH:MM">
 
-    <label for="kennzeichen">Kennzeichen des betroffenen Fahrzeuges:</label>
+    <label for="kennzeichen">Kennzeichen des Fahrzeuges:</label>
     <input type="text" id="kennzeichen" placeholder="z.B. F-AB 123">
 
-    <label for="markeFarbe">Marke und Farbe des betroffenen Fahrzeuges:</label>
+    <label for="markeFarbe">Marke und Farbe des Fahrzeuges:</label>
     <input type="text" id="markeFarbe" placeholder="z.B. VW Golf, blau">
 
     <!-- NEUES FELD HIER EINFÜGEN -->
@@ -182,7 +185,7 @@
     
     <hr>
 
-    <button id="generatePdfButton">3. PDF generieren und herunterladen</button>
+    <button id="generatePdfButton">3. PDF herunterladen</button>
     <p id="processingMessage" class="processing-message">PDF wird verarbeitet...</p>
 </div>  
 
@@ -193,13 +196,59 @@
         const fileNameDisplay = document.getElementById('fileName');
         const tatvorwurfInput = document.getElementById('tatvorwurf');
         const suggestionsContainer = document.getElementById('tatvorwurfSuggestions');
+        const tatortInput = document.getElementById('tatort'); 
         const tattagInput = document.getElementById('tattag');
         const tatzeitInput = document.getElementById('tatzeit');
-        const kennzeichenInput = document.getElementById('kennzeichen');
+        const kennzeichenInput = document.getElementById('kennzeichen'); // Bereits vorhanden
         const markeFarbeInput = document.getElementById('markeFarbe');
-        const ortDatumInput = document.getElementById('ortDatum'); 
+        const ortDatumInput = document.getElementById('ortDatum');
         const generatePdfButton = document.getElementById('generatePdfButton');
         const processingMessage = document.getElementById('processingMessage');
+
+        // --- Kennzeichen automatisch großschreiben UND formatieren ---
+        kennzeichenInput.addEventListener('input', function(e) {
+            let value = this.value;
+            const originalCursor = this.selectionStart;
+            let cursorOffset = 0;
+
+            // 1. In Großbuchstaben umwandeln
+            let newValue = value.toUpperCase();
+
+            // 2. Formatierung anwenden:
+            //    Sucht nach einem Buchstaben ([A-ZÄÖÜ]), optional gefolgt von beliebig vielen Leerzeichen (\s*),
+            //    dann einer Ziffer ([0-9]).
+            //    Ersetzt dies durch: Buchstabe, EIN Leerzeichen, Ziffer.
+            //    Der 'g'-Flag sorgt dafür, dass alle Vorkommen im String ersetzt werden (obwohl bei Kennzeichen meist nur eines relevant ist).
+            //    Dies behandelt:
+            //    - "ABC123" -> "ABC 123"
+            //    - "ABC 123" -> "ABC 123" (bleibt korrekt)
+            //    - "ABC  123" -> "ABC 123" (korrigiert zu viele Leerzeichen)
+            //    - "A-BC123" -> "A-BC 123"
+            const formattedValue = newValue.replace(/([A-ZÄÖÜ])\s*([0-9])/g, '$1 $2');
+
+            if (this.value !== formattedValue) {
+                this.value = formattedValue;
+
+                // Einfache Cursor-Anpassung:
+                // Wenn sich die Länge geändert hat (z.B. ein Leerzeichen wurde hinzugefügt/entfernt),
+                // wird versucht, die Cursorposition relativ anzupassen.
+                // Dies ist nicht immer perfekt, besonders bei komplexen Bearbeitungen mitten im String,
+                // aber für typische Eingaben oft ausreichend.
+                const diff = formattedValue.length - value.length;
+                let newCursorPos = originalCursor + diff;
+                
+                // Korrektur, falls der Cursor direkt an der Stelle der Änderung stand
+                // Beispiel: ABC|123 -> tippe '1' -> ABC1|23 (originalCursor=3)
+                // Formatierung: ABC 1|23 (newValue.length - value.length = 1) -> newCursorPos = 3 + 1 = 4. Passt.
+                // Beispiel: ABC |123 -> tippe Backspace -> AB|123 (originalCursor=2)
+                // Formatierung: AB 1|23 (newValue.length - value.length = 1) -> newCursorPos = 2 + 1 = 3. Passt.
+
+                // Sicherstellen, dass die Cursorposition gültig ist
+                newCursorPos = Math.max(0, Math.min(newCursorPos, formattedValue.length));
+                this.setSelectionRange(newCursorPos, newCursorPos);
+            }
+        });
+        // --- ENDE: Kennzeichen automatisch großschreiben UND formatieren ---
 
         // --- PDF Upload Handler ---
         pdfUploadInput.addEventListener('change', function(e) {
@@ -209,8 +258,26 @@
                 fileNameDisplay.textContent = 'Keine Datei ausgewählt';
             }
         });
+        function setSuggestedTatzeit() {
+            const now = new Date();
 
-        // --- Tattag automatisch füllen ---
+            // "Von"-Zeit: Aktuelle Zeit - 5 Minuten
+            const fromTime = new Date(now.getTime() - 5 * 60 * 1000); // 5 Minuten in Millisekunden
+            const fromHours = String(fromTime.getHours()).padStart(2, '0');
+            const fromMinutes = String(fromTime.getMinutes()).padStart(2, '0');
+
+            // "Bis"-Zeit: Aktuelle Zeit
+            const toHours = String(now.getHours()).padStart(2, '0');
+            const toMinutes = String(now.getMinutes()).padStart(2, '0');
+
+            tatzeitInput.value = `${fromHours}:${fromMinutes} - ${toHours}:${toMinutes}`;
+        }
+        // --- ENDE: Tatzeit automatisch vorschlagen ---
+
+        // Beim Laden der Seite ausführen:
+
+        setSuggestedTatzeit(); // NEU HINZUGEFÜGT
+
         function setTodaysDate() {
             const today = new Date();
             const day = String(today.getDate()).padStart(2, '0');
@@ -280,6 +347,12 @@
         }
         setOrtDatumAutomatically(); // Beim Laden der Seite auch ausführen
         // --- PDF Generierung ---
+        // --- Tatort automatisch vorschlagen/füllen ---
+function setSuggestedTatort() {
+    tatortInput.value = "Siegener Str. 54";
+}
+// --- ENDE: Tatort automatisch vorschlagen/füllen ---
+setSuggestedTatort();
         generatePdfButton.addEventListener('click', async () => {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
@@ -290,6 +363,7 @@
             const kennzeichen = kennzeichenInput.value;
             const markeFarbe = markeFarbeInput.value;
             const ortDatum = ortDatumInput.value;
+            const tatort = tatortInput.value;
 
             if (!pdfFile) {
                 alert("Bitte zuerst die Original-PDF-Datei hochladen!");
@@ -345,7 +419,13 @@
                 // Die Y-Positionen der folgenden Felder müssen relativ dazu oder als feste Werte (wie bisher) gesetzt werden.
                 // Die folgenden Y-Werte sind noch die alten, statischen Werte und müssen evtl. angepasst werden,
                 // um nicht mit einem langen Tatvorwurf zu kollidieren oder zu viel Abstand zu haben.
-
+                firstPage.drawText(tatort, {
+    x: xStart,
+    y: height - 510,
+    size: fontSize,
+    font: helveticaFont,
+    color: rgb(0, 0, 0)
+});
                 firstPage.drawText(tattag, {
                     x: xStart, y: height - 570, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
                 });
@@ -359,6 +439,9 @@
                     x: xSecondColumn, y: height - 605, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
                 });
                 firstPage.drawText(ortDatum, {
+                    x: xStart, y: height - 790, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
+                });
+                                firstPage.drawText(ortDatum, {
                     x: xStart, y: height - 790, size: fontSize, font: helveticaFont, color: rgb(0,0,0)
                 });
 
